@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>IMU Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+  <style>
+    /* ── Reset & base ─────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: #0f1117;
+      color: #e2e8f0;
+      min-height: 100vh;
+      padding: 1.5rem;
+    }
+
+    /* ── Header ──────────────────────────── */
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 1.5rem;
+    }
+
+    header h1 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      letter-spacing: .5px;
+    }
+
+    .badges {
+      display: flex;
+      gap: .6rem;
+    }
+
+    .badge {
+      display: flex;
+      align-items: center;
+      gap: .4rem;
+      font-size: .78rem;
+      font-weight: 600;
+      padding: .3rem .75rem;
+      border-radius: 999px;
+      background: #1e2130;
+      transition: background .3s;
+    }
+
+    .dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: #4a5568;
+      transition: background .3s;
+    }
+
+    .badge.ok   .dot { background: #48bb78; box-shadow: 0 0 6px #48bb78; }
+    .badge.ok        { background: #1a2d24; }
+    .badge.err  .dot { background: #fc8181; }
+
+    /* ── Section titles ───────────────────── */
+    .section-title {
+      font-size: .7rem;
+      font-weight: 700;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: #718096;
+      margin-bottom: .8rem;
+    }
+
+    /* ── Card grid ───────────────────────── */
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 1rem;
+      margin-bottom: 2rem;
+    }
+
+    .card {
+      background: #1a1f2e;
+      border: 1px solid #2d3748;
+      border-radius: 14px;
+      padding: 1.1rem 1.2rem;
+      position: relative;
+      overflow: hidden;
+      transition: border-color .3s;
+    }
+
+    .card:hover { border-color: #4a5568; }
+
+    .card-label {
+      font-size: .7rem;
+      font-weight: 700;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: #718096;
+      margin-bottom: .4rem;
+    }
+
+    .card-value {
+      font-size: 2rem;
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
+      line-height: 1.1;
+      transition: color .2s;
+    }
+
+    .card-unit {
+      font-size: .75rem;
+      color: #718096;
+      margin-top: .2rem;
+    }
+
+    /* color accent strip on top of card */
+    .card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 3px;
+      border-radius: 14px 14px 0 0;
+    }
+
+    /* Accel cards → blue/teal */
+    .card.ax::before { background: #4299e1; }
+    .card.ay::before { background: #38b2ac; }
+    .card.az::before { background: #667eea; }
+    .card.ax .card-value { color: #4299e1; }
+    .card.ay .card-value { color: #38b2ac; }
+    .card.az .card-value { color: #667eea; }
+
+    /* Gyro cards → orange/pink */
+    .card.gx::before { background: #ed8936; }
+    .card.gy::before { background: #e53e3e; }
+    .card.gz::before { background: #d53f8c; }
+    .card.gx .card-value { color: #ed8936; }
+    .card.gy .card-value { color: #e53e3e; }
+    .card.gz .card-value { color: #d53f8c; }
+
+    /* ── Bar meter under each card ────────── */
+    .bar-track {
+      width: 100%;
+      height: 5px;
+      background: #2d3748;
+      border-radius: 99px;
+      margin-top: .8rem;
+      overflow: hidden;
+    }
+
+    .bar-fill {
+      height: 100%;
+      border-radius: 99px;
+      transition: width .12s ease;
+      background: currentColor;
+      min-width: 0;
+      max-width: 100%;
+    }
+
+    /* ── Chart area ──────────────────────── */
+    .chart-wrap {
+      background: #1a1f2e;
+      border: 1px solid #2d3748;
+      border-radius: 14px;
+      padding: 1.2rem;
+    }
+
+    canvas { width: 100% !important; }
+  </style>
+</head>
+<body>
+
+<!-- ── Header ───────────────────────────────────────── -->
+<header>
+  <h1>📡 IMU Dashboard</h1>
+  <div class="badges">
+    <div class="badge" id="badge-server">
+      <div class="dot"></div> Server
+    </div>
+    <div class="badge" id="badge-esp32">
+      <div class="dot"></div> ESP32
+    </div>
+  </div>
+</header>
+
+<!-- ── Accelerometer cards ───────────────────────────── -->
+<p class="section-title">Accelerometer</p>
+<div class="grid">
+  <div class="card ax">
+    <div class="card-label">Accel X</div>
+    <div class="card-value" id="ax">0.000</div>
+    <div class="card-unit">g</div>
+    <div class="bar-track"><div class="bar-fill" id="bar-ax" style="color:#4299e1;width:50%"></div></div>
+  </div>
+  <div class="card ay">
+    <div class="card-label">Accel Y</div>
+    <div class="card-value" id="ay">0.000</div>
+    <div class="card-unit">g</div>
+    <div class="bar-track"><div class="bar-fill" id="bar-ay" style="color:#38b2ac;width:50%"></div></div>
+  </div>
+  <div class="card az">
+    <div class="card-label">Accel Z</div>
+    <div class="card-value" id="az">0.000</div>
+    <div class="card-unit">g</div>
+    <div class="bar-track"><div class="bar-fill" id="bar-az" style="color:#667eea;width:50%"></div></div>
+  </div>
+</div>
+
+<!-- ── Gyroscope cards ───────────────────────────────── -->
+<p class="section-title">Gyroscope</p>
+<div class="grid">
+  <div class="card gx">
+    <div class="card-label">Gyro X</div>
+    <div class="card-value" id="gx">0.000</div>
+    <div class="card-unit">deg/s</div>
+    <div class="bar-track"><div class="bar-fill" id="bar-gx" style="color:#ed8936;width:50%"></div></div>
+  </div>
+  <div class="card gy">
+    <div class="card-label">Gyro Y</div>
+    <div class="card-value" id="gy">0.000</div>
+    <div class="card-unit">deg/s</div>
+    <div class="bar-track"><div class="bar-fill" id="bar-gy" style="color:#e53e3e;width:50%"></div></div>
+  </div>
+  <div class="card gz">
+    <div class="card-label">Gyro Z</div>
+    <div class="card-value" id="gz">0.000</div>
+    <div class="card-unit">deg/s</div>
+    <div class="bar-track"><div class="bar-fill" id="bar-gz" style="color:#d53f8c;width:50%"></div></div>
+  </div>
+</div>
+
+<!-- ── Rolling chart ─────────────────────────────────── -->
+<p class="section-title">Live Chart (last 100 samples)</p>
+<div class="chart-wrap">
+  <canvas id="chart" height="120"></canvas>
+</div>
+
+<script>
+// ── Rolling chart setup ───────────────────────────────
+const MAX_POINTS = 100;
+const labels     = Array(MAX_POINTS).fill('');
+
+function emptyData() { return Array(MAX_POINTS).fill(null); }
+
+const chartData = {
+  labels,
+  datasets: [
+    { label:'Ax', data: emptyData(), borderColor:'#4299e1', borderWidth:1.5, pointRadius:0, tension:.3 },
+    { label:'Ay', data: emptyData(), borderColor:'#38b2ac', borderWidth:1.5, pointRadius:0, tension:.3 },
+    { label:'Az', data: emptyData(), borderColor:'#667eea', borderWidth:1.5, pointRadius:0, tension:.3 },
+    { label:'Gx', data: emptyData(), borderColor:'#ed8936', borderWidth:1.5, pointRadius:0, tension:.3 },
+    { label:'Gy', data: emptyData(), borderColor:'#e53e3e', borderWidth:1.5, pointRadius:0, tension:.3 },
+    { label:'Gz', data: emptyData(), borderColor:'#d53f8c', borderWidth:1.5, pointRadius:0, tension:.3 },
+  ]
+};
+
+const chart = new Chart(document.getElementById('chart'), {
+  type: 'line',
+  data: chartData,
+  options: {
+    animation:   false,
+    responsive:  true,
+    interaction: { mode: 'index', intersect: false },
+    plugins: {
+      legend: {
+        labels: { color: '#a0aec0', boxWidth: 14, font: { size: 11 } }
+      }
+    },
+    scales: {
+      x: { display: false },
+      y: {
+        grid:  { color: '#2d3748' },
+        ticks: { color: '#718096', font: { size: 11 } }
+      }
+    }
+  }
+});
+
+function pushToChart(d) {
+  const vals = [d.ax, d.ay, d.az, d.gx, d.gy, d.gz];
+  chartData.datasets.forEach((ds, i) => {
+    ds.data.push(vals[i]);
+    if (ds.data.length > MAX_POINTS) ds.data.shift();
+  });
+  chart.update('none');   // no animation for speed
+}
+// ─────────────────────────────────────────────────────
+
+// ── Card updater ──────────────────────────────────────
+// Maps value range → bar width %
+// Accel: ±2g  →  0–100%   (centre = 50%)
+// Gyro:  ±250 →  0–100%
+function valToBar(v, range) {
+  return Math.min(100, Math.max(0, ((v + range) / (2 * range)) * 100)).toFixed(1) + '%';
+}
+
+function updateCards(d) {
+  document.getElementById('ax').textContent = d.ax.toFixed(3);
+  document.getElementById('ay').textContent = d.ay.toFixed(3);
+  document.getElementById('az').textContent = d.az.toFixed(3);
+  document.getElementById('gx').textContent = d.gx.toFixed(3);
+  document.getElementById('gy').textContent = d.gy.toFixed(3);
+  document.getElementById('gz').textContent = d.gz.toFixed(3);
+
+  document.getElementById('bar-ax').style.width = valToBar(d.ax, 2);
+  document.getElementById('bar-ay').style.width = valToBar(d.ay, 2);
+  document.getElementById('bar-az').style.width = valToBar(d.az, 2);
+  document.getElementById('bar-gx').style.width = valToBar(d.gx, 250);
+  document.getElementById('bar-gy').style.width = valToBar(d.gy, 250);
+  document.getElementById('bar-gz').style.width = valToBar(d.gz, 250);
+
+  pushToChart(d);
+}
+// ─────────────────────────────────────────────────────
+
+// ── Badge helpers ─────────────────────────────────────
+function setBadge(id, online) {
+  const el = document.getElementById(id);
+  el.classList.toggle('ok',  online);
+  el.classList.toggle('err', !online);
+}
+// ─────────────────────────────────────────────────────
+
+// ── WebSocket ─────────────────────────────────────────
+const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+const ws    = new WebSocket(`${proto}://${location.host}/ws`);
+
+ws.onopen = () => {
+  setBadge('badge-server', true);
+  console.log('[WS] connected to server');
+};
+
+ws.onclose = () => {
+  setBadge('badge-server', false);
+  setBadge('badge-esp32',  false);
+  console.log('[WS] disconnected — reload to reconnect');
+  // auto-reconnect after 3s
+  setTimeout(() => location.reload(), 3000);
+};
+
+ws.onmessage = ({ data }) => {
+  const msg = JSON.parse(data);
+
+  if (msg.type === 'imu') {
+    updateCards(msg);
+  } else if (msg.type === 'status') {
+    setBadge('badge-esp32', msg.esp32);
+  }
+};
+// ─────────────────────────────────────────────────────
+</script>
+</body>
+</html>
